@@ -11,7 +11,7 @@
 typedef uint32_t EntityID;
 #define ENTITY_NULL 0
 
-template<typename T>
+template <typename T>
 struct ComponentManager
 {
 	std::unordered_map<EntityID, size_t> componentLookups;
@@ -77,18 +77,18 @@ struct Registry
 
 	EntityID CreateEntity()
 	{
-		EntityID id = ++mEntityIndex;
-		mEntityDeleters[id] = {};
-		return id;
+		EntityID mId = ++mEntityIndex;
+		mEntityDeleters[mId] = {};
+		return mId;
 	}
 
 	void DestroyEntity(EntityID& entity)
 	{
-		for(auto& pair : mEntityDeleters[entity])
+		for (auto& pair : mEntityDeleters[entity])
 		{
 			pair.second();
 		}
-		
+
 		mEntityDeleters[entity].clear();
 
 		assert(mEntityDeleters[entity].size() == 0);
@@ -118,8 +118,7 @@ struct Registry
 			comMgr->typeIndex = typeIndex;
 			mComponentManagers[typeIndex] = comMgr;
 
-			mReleaseFunctions.push_back([=]() 
-			{
+			mReleaseFunctions.push_back([=]() {
 				delete comMgr;
 				mComponentManagers.erase(typeIndex);
 			});
@@ -132,8 +131,7 @@ struct Registry
 	T* AddComponent(EntityID entity, Args&&... args)
 	{
 		ComponentManager<T>* compMgr = GetComponentManager<T>();
-		auto deleter = [=]()
-		{
+		auto deleter = [=]() {
 			RemoveComponent<T>(entity);
 		};
 		mEntityDeleters[entity][compMgr->typeIndex] = deleter;
@@ -169,90 +167,79 @@ public:
 	static void Destroy(Entity entity);
 	static void Release();
 
-    Entity()    
-    {
-        id = ENTITY_NULL;
-    }
-
-    Entity(EntityID entityId)
+	Entity()
 	{
-		id = entityId;
-    }
+		mId = ENTITY_NULL;
+	}
 
-    Entity(const Entity& other)
-    {
-        id = other.id;
-    }
+	Entity(EntityID entityId)
+	{
+		mId = entityId;
+	}
 
-    static Registry& GetRegistry();
+	Entity(const Entity& other)
+	{
+		mId = other.mId;
+	}
 
-    operator EntityID()
-    {
-        return id;
-    }
+	static Registry& GetRegistry();
 
-    bool operator!() const
-    {
-        return id == ENTITY_NULL;
-    }
+	operator EntityID()
+	{
+		return mId;
+	}
 
-    explicit operator bool() const
-    {
-        return id != ENTITY_NULL;
-    }
+	bool operator!() const
+	{
+		return mId == ENTITY_NULL;
+	}
 
-    bool operator==(const Entity& other) const
-    {
-        return id == other.id;
-    }
+	explicit operator bool() const
+	{
+		return mId != ENTITY_NULL;
+	}
 
-    bool operator!=(const Entity& other) const
-    {
-        return id != other.id;
-    }
+	bool operator==(const Entity& other) const
+	{
+		return mId == other.mId;
+	}
 
-    template <typename T, typename... Args>
+	bool operator!=(const Entity& other) const
+	{
+		return mId != other.mId;
+	}
+
+	template <typename T, typename... Args>
 	T* AddComponent(Args&&... args)
-    {
-		return GetRegistry().AddComponent<T>(id, std::forward<Args>(args)...);
-    }
+	{
+		return GetRegistry().AddComponent<T>(mId, std::forward<Args>(args)...);
+	}
 
-    template <typename T>
-    T* GetComponent() const
-    {
-        return GetRegistry().GetComponent<T>(id);
-    }
+	template <typename T>
+	T* GetComponent() const
+	{
+		return GetRegistry().GetComponent<T>(mId);
+	}
 
-    template <typename T>
-    void RemoveComponent()
-    {
-        GetRegistry().RemoveComponent<T>(id);
-    }
+	template <typename T>
+	void RemoveComponent()
+	{
+		GetRegistry().RemoveComponent<T>(mId);
+	}
 
-    template <typename T>
-    bool ContainComponent()
-    {
-        return GetRegistry().ContainComponent<T>(id);
-    }
+	template <typename T>
+	bool ContainComponent()
+	{
+		return GetRegistry().ContainComponent<T>(mId);
+	}
 
 	template <typename T, typename U>
 	bool ContainComponent()
 	{
-		return GetRegistry().ContainComponent<T>(id) && GetRegistry().ContainComponent<U>(id);
+		return GetRegistry().ContainComponent<T>(mId) && GetRegistry().ContainComponent<U>(mId);
 	}
 
 	template <typename T>
-	static void ForEach(std::function<void(T*)> func)
-	{
-		ComponentManager<T>* compMgr = GetRegistry().GetComponentManager<T>();
-		for (size_t i = 0; i < compMgr->components.size(); i++)
-		{
-			T* component = &compMgr->components[i];
-			func(component);
-		}
-	}
-
-    template <typename T>
 	static void ForEach(std::function<void(Entity, T*)> func)
 	{
 		ComponentManager<T>* compMgr = GetRegistry().GetComponentManager<T>();
@@ -265,21 +252,99 @@ public:
 	}
 
 	template <typename T, typename U>
-	static void ForEach(std::function<void(T*, U*)> func)
+	static void ForEach(std::function<void(Entity, T*, U*)> func)
 	{
-		ComponentManager<T>* compMgr = GetRegistry().GetComponentManager<T>();
-		for (size_t i = 0; i < compMgr->components.size(); i++)
+		ComponentManager<T>* compMgrT = GetRegistry().GetComponentManager<T>();
+		ComponentManager<U>* compMgrU = GetRegistry().GetComponentManager<U>();
+		if (compMgrT->components.size() <= compMgrU->components.size())
 		{
-			Entity entity = compMgr->owners[i];
-			T* componentT = &compMgr->components[i];
-			U* componentU = entity.GetComponent<U>();
-			if (componentU)
-			{
-				func(componentT, componentU);
-			}
+			ForEach<T>([&func](Entity entity, T* componentT) {
+				U* componentU = entity.GetComponent<U>();
+				if (componentU)
+				{
+					func(entity, componentT, componentU);
+				}
+			});
+		}
+		else
+		{
+			ForEach<U>([&func](Entity entity, U* componentU) {
+				T* componentT = entity.GetComponent<T>();
+				if (componentT)
+				{
+					func(entity, componentT, componentU);
+				}
+			});
 		}
 	}
 
+	template <typename T, typename U, typename V>
+	static void ForEach(std::function<void(Entity, T*, U*, V*)> func)
+	{
+		size_t compMgrTCount = GetRegistry().GetComponentManager<T>()->components.size();
+		size_t compMgrUCount = GetRegistry().GetComponentManager<U>()->components.size();
+		size_t compMgrVCount = GetRegistry().GetComponentManager<V>()->components.size();
+		size_t minCount = compMgrTCount < compMgrUCount ? compMgrTCount : compMgrUCount;
+		minCount = minCount < compMgrVCount ? minCount : compMgrVCount;
+		if (minCount == compMgrTCount)
+		{
+			ForEach<T>([&func](Entity entity, T* componentT) {
+				U* componentU = entity.GetComponent<U>();
+				V* componentV = entity.GetComponent<V>();
+				if (componentU && componentV)
+				{
+					func(entity, componentT, componentU, componentV);
+				}
+			});
+		}
+		else if (minCount == compMgrUCount)
+		{
+			ForEach<U>([&func](Entity entity, U* componentU) {
+				T* componentT = entity.GetComponent<T>();
+				V* componentV = entity.GetComponent<V>();
+				if (componentT && componentV)
+				{
+					func(entity, componentT, componentU, componentV);
+				};
+			});
+		}
+		else if (minCount == compMgrVCount)
+		{
+			ForEach<V>([&func](Entity entity, V* componentV) {
+				T* componentT = entity.GetComponent<T>();
+				U* componentU = entity.GetComponent<U>();
+				if (componentT && componentU)
+				{
+					func(entity, componentT, componentU, componentV);
+				}
+			});
+		}
+	}
+
+	template <typename T>
+	static void ForEach(std::function<void(T*)> func)
+	{
+		ForEach<T>([&func](Entity, T* component) {
+			func(component);
+		});
+	}
+
+	template <typename T, typename U>
+	static void ForEach(std::function<void(T*, U*)> func)
+	{
+		ForEach<T, U>([&func](Entity, T* componentT, U* componentU) {
+			func(componentT, componentU);
+		});
+	}
+
+	template <typename T, typename U, typename V>
+	static void ForEach(std::function<void(T*, U*, V*)> func)
+	{
+		ForEach<T, U, V>([&func](Entity, T* componentT, U* componentU, V* componentV) {
+			func(componentT, componentU, componentV);
+		});
+	}
+
 private:
-	EntityID id;
+	EntityID mId;
 };

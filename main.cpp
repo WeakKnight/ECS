@@ -24,6 +24,10 @@ struct Velocity
 	float dy;
 };
 
+struct Movable
+{
+};
+
 int main()
 {
 	for (int i = 0; i < 10; i++)
@@ -35,10 +39,14 @@ int main()
 		if (i % 2 == 0)
 		{
 			entity.AddComponent<Velocity>(i * 1.0f, i * 1.0f);
+			if (i % 3 == 0)
+			{
+				entity.AddComponent<Movable>();
+			}
 		}
 	}
 
-	Entity::ForEach<Position, Velocity>([](Position* position, Velocity* velocity) {
+	Entity::ForEach<Position, Velocity, Movable>([](Position* position, Velocity* velocity, Movable*) {
 		position->x += velocity->dx;
 		position->y += velocity->dy;
 		printf("[x: %f, y: %f]\n", position->x, position->y);

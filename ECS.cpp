@@ -1,17 +1,17 @@
 #include "ECS.h"
 
-static Registry sRegistry; 
+static Registry sRegistry;
 
 Entity Entity::Create()
 {
 	Entity result = {};
-	result.id =  sRegistry.CreateEntity();
+	result.mId = sRegistry.CreateEntity();
 	return result;
 }
 
 void Entity::Destroy(Entity entity)
 {
-	sRegistry.DestroyEntity(entity.id);
+	sRegistry.DestroyEntity(entity.mId);
 }
 
 void Entity::Release()
@@ -21,5 +21,5 @@ void Entity::Release()
 
 Registry& Entity::GetRegistry()
 {
-    return sRegistry;
+	return sRegistry;
 }
