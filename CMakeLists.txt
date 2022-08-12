@@ -8,4 +8,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY $<1:${PROJECT_SOURCE_DIR}/Bin/Release>)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG $<1:${PROJECT_SOURCE_DIR}/Bin/Debug>)
 
-add_executable(ECS main.cpp)
+file(GLOB SOURCES ./*.cpp)
+file(GLOB HEADERS ./*.h)
+
+add_executable(ECS ${SOURCES} ${HEADERS})

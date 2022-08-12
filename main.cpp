@@ -1,40 +1,41 @@
-#include <stdint.h>
-#include <atomic>
-#include <unordered_map>
-#include <vector>
-#include <typeinfo>
-
-typedef uint32_t Entity;
+#include "ECS.h"
 
 struct Position
 {
-    float x;
-    float y;
-    float z;
+	float x;
+	float y;
 };
 
-static std::atomic<uint32_t> sEntityIndex = 0;
-static std::unordered_map<const char*, std::vector<void*>> sComponents;
-static std::unordered_map<const char*, std::unordered_map<Entity, size_t>> sLookupMap;
-
-Entity entity_create()
+struct Velocity
 {
-    return sEntityIndex++;
-}
-
-template<typename T>
-void entity_add_component(Entity entity)
-{
-
-}
+	float dx;
+	float dy;
+};
 
 int main()
 {
-    Entity entity = entity_create();
+	for (int i = 0; i < 10; i++)
+	{
+		Entity entity = Entity::Create();
 
-    sComponents["Position"] = {};
+		Position* position = entity.AddComponent<Position>();
+		position->x = i * 1.0f;
+		position->y = i * 1.0f;
 
-    Position positionCom = {};
+		if (i % 2 == 0)
+		{
+			Velocity* velocity = entity.AddComponent<Velocity>();
+			velocity->dx = i * 1.0f;
+			velocity->dy = i * 1.0f;
+		}
+	}
 
-    return 0;
+	Entity::ForEach<Position, Velocity>([](Position* position, Velocity* velocity) {
+		position->x += velocity->dx;
+		position->y += velocity->dy;
+	});
+
+	Entity::Release();
+
+	return 0;
 }
