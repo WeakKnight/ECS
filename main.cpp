@@ -2,12 +2,24 @@
 
 struct Position
 {
+	Position(float px, float py)
+	{
+		x = px;
+		y = py;
+	}
+
 	float x;
 	float y;
 };
 
 struct Velocity
 {
+	Velocity(float pdx, float pdy)
+	{
+		dx = pdx;
+		dy = pdy;
+	}
+
 	float dx;
 	float dy;
 };
@@ -18,21 +30,18 @@ int main()
 	{
 		Entity entity = Entity::Create();
 
-		Position* position = entity.AddComponent<Position>();
-		position->x = i * 1.0f;
-		position->y = i * 1.0f;
+		entity.AddComponent<Position>(i * 1.0f, i * 1.0f);
 
 		if (i % 2 == 0)
 		{
-			Velocity* velocity = entity.AddComponent<Velocity>();
-			velocity->dx = i * 1.0f;
-			velocity->dy = i * 1.0f;
+			entity.AddComponent<Velocity>(i * 1.0f, i * 1.0f);
 		}
 	}
 
 	Entity::ForEach<Position, Velocity>([](Position* position, Velocity* velocity) {
 		position->x += velocity->dx;
 		position->y += velocity->dy;
+		printf("[x: %f, y: %f]\n", position->x, position->y);
 	});
 
 	Entity::Release();

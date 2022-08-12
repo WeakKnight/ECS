@@ -20,9 +20,10 @@ struct ComponentManager
 	std::vector<T> components;
 	size_t typeIndex;
 
-	T* AddComponent(EntityID entity)
+	template <typename... Args>
+	T* AddComponent(EntityID entity, Args&&... args)
 	{
-		components.push_back({});
+		components.push_back(T(std::forward<Args>(args)...));
 		owners.push_back(entity);
 		componentLookups[entity] = components.size() - 1;
 		entityLookups[&components.back()] = entity;
@@ -127,8 +128,8 @@ struct Registry
 		return compMgr;
 	}
 
-	template <typename T>
-	T* AddComponent(EntityID entity)
+	template <typename T, typename... Args>
+	T* AddComponent(EntityID entity, Args&&... args)
 	{
 		ComponentManager<T>* compMgr = GetComponentManager<T>();
 		auto deleter = [=]()
@@ -136,7 +137,7 @@ struct Registry
 			RemoveComponent<T>(entity);
 		};
 		mEntityDeleters[entity][compMgr->typeIndex] = deleter;
-		return compMgr->AddComponent(entity);
+		return compMgr->AddComponent(entity, std::forward<Args>(args)...);
 	}
 
 	template <typename T>
@@ -210,10 +211,10 @@ public:
         return id != other.id;
     }
 
-    template <typename T>
-    T* AddComponent()
+    template <typename T, typename... Args>
+	T* AddComponent(Args&&... args)
     {
-        return GetRegistry().AddComponent<T>(id);
+		return GetRegistry().AddComponent<T>(id, std::forward<Args>(args)...);
     }
 
     template <typename T>
