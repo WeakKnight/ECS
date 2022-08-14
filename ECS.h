@@ -182,8 +182,6 @@ public:
 		mId = other.mId;
 	}
 
-	static Registry& GetRegistry();
-
 	operator EntityID()
 	{
 		return mId;
@@ -346,5 +344,7 @@ public:
 	}
 
 private:
+	static Registry& GetRegistry();
+	
 	EntityID mId;
 };
