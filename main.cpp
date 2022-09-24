@@ -28,8 +28,12 @@ struct Movable
 {
 };
 
+typedef ECS::Entity Entity;
+
 int main()
 {
+	ECS::Init();
+
 	for (int i = 0; i < 100; i++)
 	{
 		Entity entity = Entity::Create();
@@ -41,7 +45,8 @@ int main()
 			entity.AddComponent<Velocity>(i * 1.0f, i * 1.0f);
 			if (i % 3 == 0)
 			{
-				entity.AddComponent<Movable>();
+				auto movable = entity.AddComponent<Movable>();
+				assert(entity == Entity::FromComponent(movable));
 			}
 		}
 	}
@@ -52,7 +57,7 @@ int main()
 		printf("[x: %f, y: %f]\n", position->x, position->y);
 	});
 
-	Entity::Release();
+	ECS::Release();
 
 	return 0;
 }
