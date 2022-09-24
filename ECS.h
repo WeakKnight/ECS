@@ -4,6 +4,7 @@
 #include <vcruntime.h>
 #include <vector>
 #include <unordered_map>
+#include <map>
 #include <typeinfo>
 #include <functional>
 #include <cassert>
@@ -101,6 +102,8 @@ namespace ECS
 			mOwners[handle.index] = owner;
 			mComponents[handle.index] = T(std::forward<Args>(args)...);
 
+			mFreeSlots.pop_back();
+
 			return handle;
 		}
 
@@ -166,7 +169,7 @@ namespace ECS
 	template <typename T>
 	struct ComponentManager
 	{
-		std::unordered_map<EntityID, ComponentHandle<T>> componentLookups;
+		std::map<EntityID, ComponentHandle<T>> componentLookups;
 		ComponentPool<T> components;
 
 		size_t typeIndex;

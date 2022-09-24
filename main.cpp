@@ -39,6 +39,7 @@ int main()
 		Entity entity = Entity::Create();
 
 		entity.AddComponent<Position>(i * 1.0f, i * 1.0f);
+		entity.AddComponent<Velocity>(i * 1.0f, i * 1.0f);
 
 		if (i % 2 == 0)
 		{
@@ -52,7 +53,7 @@ int main()
 		}
 	}
 
-	Entity::ForEach<Position, Velocity, Movable>([](Position* position, Velocity* velocity, Movable*) {
+	Entity::ForEach<Position, Velocity, Movable>([](ECS::ComponentHandle<Position> position, ECS::ComponentHandle<Velocity> velocity, ECS::ComponentHandle<Movable>) {
 		position->x += velocity->dx;
 		position->y += velocity->dy;
 		printf("[x: %f, y: %f]\n", position->x, position->y);
