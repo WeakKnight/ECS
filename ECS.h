@@ -14,67 +14,191 @@ namespace ECS
 	void Release();
 
 	typedef uint32_t EntityID;
+	typedef uint64_t ComponentHash;
 #define ENTITY_NULL 0
+
+	template <typename T>
+	struct ComponentHandle
+	{
+		operator T*()
+		{
+			return Get();
+		}
+
+		operator const T*() const
+		{
+			return Get();
+		}
+
+		bool operator!() const
+		{
+			return (Get() == nullptr);
+		}
+
+		explicit operator bool() const
+		{
+			return (Get() != nullptr);
+		}
+
+		T* operator->() { return Get(); }
+		const T* operator->() const { return Get(); }
+
+		T* Get()
+		{
+			return Entity::GetRegistry().GetComponentManager<T>()->components.Get(*this);
+		}
+
+		ComponentHash Hash()
+		{
+			return (uint64_t)index + generation;
+		}
+
+		uint32_t index = ~0u;
+		uint32_t generation = 0u;
+	};
+
+	template <typename T>
+	struct ComponentPool
+	{
+		T* mComponents;
+		std::vector<EntityID> mOwners;
+		std::vector<uint32_t> mGenerations;
+		std::vector<uint32_t> mFreeSlots;
+		size_t mCapacity = 1024;
+
+		ComponentPool()
+		{
+			mComponents = (T*)malloc(sizeof(T) * mCapacity);
+			mOwners.resize(mCapacity);
+			mGenerations.resize(mCapacity);
+			mFreeSlots.reserve(mCapacity);
+
+			for (size_t i = 0; i < mCapacity; i++)
+			{
+				mFreeSlots.push_back((EntityID)i);
+			}
+		}
+
+		~ComponentPool()
+		{
+			free(mComponents);
+		}
+
+		template <typename... Args>
+		ComponentHandle<T> Alloc(EntityID owner, Args&&... args)
+		{
+			assert(mGenerations.size() == mOwners.size());
+
+			if (mFreeSlots.size() <= 0u)
+			{
+				Grow();
+			}
+
+			ComponentHandle<T> handle;
+			handle.index = mFreeSlots.back();
+			handle.generation = mGenerations[handle.index];
+
+			mOwners[handle.index] = owner;
+			mComponents[handle.index] = T(std::forward<Args>(args)...);
+
+			return handle;
+		}
+
+		void Free(ComponentHandle<T> handle)
+		{
+			if (!IsValid(handle))
+			{
+				return;
+			}
+
+			mGenerations[handle.index]++;
+			mFreeSlots.push_back(handle.index);
+		}
+
+		bool IsValid(ComponentHandle<T> handle)
+		{
+			return handle.index != ~0u && mGenerations[handle.index] == handle.generation;
+		}
+
+		void Grow()
+		{
+			size_t newCapacity = mCapacity * 2;
+
+			mFreeSlots.reserve(newCapacity);
+			for (size_t i = mCapacity; i < newCapacity; i++)
+			{
+				mFreeSlots.push_back((EntityID)i);
+			}
+
+			T* newComponents = (T*)malloc(sizeof(T) * newCapacity);
+			memcpy(newComponents, mComponents, sizeof(T) * mCapacity);
+			free(mComponents);
+			mComponents = newComponents;
+
+			mOwners.resize(newCapacity);
+
+			mGenerations.resize(newCapacity);
+
+			mCapacity = newCapacity;
+		}
+
+		T* Get(ComponentHandle<T> handle)
+		{
+			if (!IsValid(handle))
+			{
+				return nullptr;
+			}
+
+			return &mComponents[handle.index];
+		}
+
+		EntityID Owner(ComponentHandle<T> handle)
+		{
+			if (!IsValid(handle))
+			{
+				return ENTITY_NULL;
+			}
+
+			return mOwners[handle.index];
+		}
+	};
 
 	template <typename T>
 	struct ComponentManager
 	{
-		std::unordered_map<EntityID, size_t> componentLookups;
-		std::unordered_map<T*, EntityID> entityLookups;
-		std::vector<EntityID> owners;
-		std::vector<T> components;
+		std::unordered_map<EntityID, ComponentHandle<T>> componentLookups;
+		ComponentPool<T> components;
+
 		size_t typeIndex;
 
-		EntityID GetEntity(T* component)
+		EntityID GetEntity(ComponentHandle<T> component)
 		{
-			auto foundIter = entityLookups.find(component);
-			if (foundIter == entityLookups.cend())
-			{
-				return ENTITY_NULL;
-			}
-			return foundIter->second;
+			return components.Owner(component);
 		}
 
 		template <typename... Args>
-		T* AddComponent(EntityID entity, Args&&... args)
+		ComponentHandle<T> AddComponent(EntityID entity, Args&&... args)
 		{
-			components.push_back(T(std::forward<Args>(args)...));
-			owners.push_back(entity);
-			componentLookups[entity] = components.size() - 1;
-			entityLookups[&components.back()] = entity;
-			return &components.back();
+			ComponentHandle<T> result = components.Alloc(entity, std::forward<Args>(args)...);
+			componentLookups[entity] = result;
+			return result;
 		}
 
-		T* GetComponent(EntityID entity)
+		ComponentHandle<T> GetComponent(EntityID entity)
 		{
 			auto itemFound = componentLookups.find(entity);
 			if (itemFound == componentLookups.cend())
 			{
-				return nullptr;
+				return {};
 			}
-			return &components[itemFound->second];
+			return itemFound->second;
 		}
 
 		void RemoveComponent(EntityID entity)
 		{
-			size_t compIndex = componentLookups[entity];
+			ComponentHandle<T> handle = componentLookups[entity];
 			componentLookups.erase(entity);
-			entityLookups.erase(&components[compIndex]);
-
-			owners[compIndex] = owners.back();
-			owners.pop_back();
-			if (owners.size() >= 1)
-			{
-				componentLookups[owners[compIndex]] = compIndex;
-			}
-
-			components[compIndex] = components.back();
-			entityLookups.erase(&components.back());
-			components.pop_back();
-			if (components.size() >= 1)
-			{
-				entityLookups[&components[compIndex]] = owners[compIndex];
-			}
+			components.Free(handle);
 		}
 
 		bool ContainComponent(EntityID entity) const
@@ -145,7 +269,7 @@ namespace ECS
 		}
 
 		template <typename T, typename... Args>
-		T* AddComponent(EntityID entity, Args&&... args)
+		ComponentHandle<T> AddComponent(EntityID entity, Args&&... args)
 		{
 			ComponentManager<T>* compMgr = GetComponentManager<T>();
 			auto deleter = [=]() {
@@ -156,7 +280,7 @@ namespace ECS
 		}
 
 		template <typename T>
-		T* GetComponent(EntityID entity)
+		ComponentHandle<T> GetComponent(EntityID entity)
 		{
 			ComponentManager<T>* compMgr = GetComponentManager<T>();
 			return compMgr->GetComponent(entity);
@@ -177,10 +301,11 @@ namespace ECS
 		}
 
 		template <typename T>
-		EntityID FromComponent(T* component)
+		EntityID FromComponent(ComponentHandle<T> component)
 		{
 			ComponentManager<T>* compMgr = GetComponentManager<T>();
-			return compMgr->GetEntity(component);
+			EntityID entity = compMgr->GetEntity(component);
+			return entity;
 		}
 	};
 
@@ -231,13 +356,13 @@ namespace ECS
 		}
 
 		template <typename T, typename... Args>
-		T* AddComponent(Args&&... args)
+		ComponentHandle<T> AddComponent(Args&&... args)
 		{
 			return GetRegistry().AddComponent<T>(mId, std::forward<Args>(args)...);
 		}
 
 		template <typename T>
-		T* GetComponent() const
+		ComponentHandle<T> GetComponent() const
 		{
 			return GetRegistry().GetComponent<T>(mId);
 		}
@@ -261,32 +386,30 @@ namespace ECS
 		}
 
 		template <typename T>
-		static Entity FromComponent(T* component)
+		static Entity FromComponent(ComponentHandle<T> component)
 		{
 			return GetRegistry().FromComponent(component);
 		}
 
 		template <typename T>
-		static void ForEach(std::function<void(Entity, T*)> func)
+		static void ForEach(std::function<void(Entity, ComponentHandle<T>)> func)
 		{
 			ComponentManager<T>* compMgr = GetRegistry().GetComponentManager<T>();
-			for (size_t i = 0; i < compMgr->components.size(); i++)
+			for (auto& pair : compMgr->componentLookups)
 			{
-				Entity entity = compMgr->owners[i];
-				T* component = &compMgr->components[i];
-				func(entity, component);
+				func(pair.first, pair.second);
 			}
 		}
 
 		template <typename T, typename U>
-		static void ForEach(std::function<void(Entity, T*, U*)> func)
+		static void ForEach(std::function<void(Entity, ComponentHandle<T>, ComponentHandle<U>)> func)
 		{
 			ComponentManager<T>* compMgrT = GetRegistry().GetComponentManager<T>();
 			ComponentManager<U>* compMgrU = GetRegistry().GetComponentManager<U>();
-			if (compMgrT->components.size() <= compMgrU->components.size())
+			if (compMgrT->componentLookups.size() <= compMgrU->componentLookups.size())
 			{
-				ForEach<T>([&func](Entity entity, T* componentT) {
-					U* componentU = entity.GetComponent<U>();
+				ForEach<T>([&func](Entity entity, ComponentHandle<T> componentT) {
+					ComponentHandle<U> componentU = entity.GetComponent<U>();
 					if (componentU)
 					{
 						func(entity, componentT, componentU);
@@ -295,8 +418,8 @@ namespace ECS
 			}
 			else
 			{
-				ForEach<U>([&func](Entity entity, U* componentU) {
-					T* componentT = entity.GetComponent<T>();
+				ForEach<U>([&func](Entity entity, ComponentHandle<U> componentU) {
+					ComponentHandle<T> componentT = entity.GetComponent<T>();
 					if (componentT)
 					{
 						func(entity, componentT, componentU);
@@ -306,18 +429,18 @@ namespace ECS
 		}
 
 		template <typename T, typename U, typename V>
-		static void ForEach(std::function<void(Entity, T*, U*, V*)> func)
+		static void ForEach(std::function<void(Entity, ComponentHandle<T>, ComponentHandle<U>, ComponentHandle<V>)> func)
 		{
-			size_t compMgrTCount = GetRegistry().GetComponentManager<T>()->components.size();
-			size_t compMgrUCount = GetRegistry().GetComponentManager<U>()->components.size();
-			size_t compMgrVCount = GetRegistry().GetComponentManager<V>()->components.size();
+			size_t compMgrTCount = GetRegistry().GetComponentManager<T>()->componentLookups.size();
+			size_t compMgrUCount = GetRegistry().GetComponentManager<U>()->componentLookups.size();
+			size_t compMgrVCount = GetRegistry().GetComponentManager<V>()->componentLookups.size();
 			size_t minCount = compMgrTCount < compMgrUCount ? compMgrTCount : compMgrUCount;
 			minCount = minCount < compMgrVCount ? minCount : compMgrVCount;
 			if (minCount == compMgrTCount)
 			{
-				ForEach<T>([&func](Entity entity, T* componentT) {
-					U* componentU = entity.GetComponent<U>();
-					V* componentV = entity.GetComponent<V>();
+				ForEach<T>([&func](Entity entity, ComponentHandle<T> componentT) {
+					ComponentHandle<U> componentU = entity.GetComponent<U>();
+					ComponentHandle<V> componentV = entity.GetComponent<V>();
 					if (componentU && componentV)
 					{
 						func(entity, componentT, componentU, componentV);
@@ -326,9 +449,9 @@ namespace ECS
 			}
 			else if (minCount == compMgrUCount)
 			{
-				ForEach<U>([&func](Entity entity, U* componentU) {
-					T* componentT = entity.GetComponent<T>();
-					V* componentV = entity.GetComponent<V>();
+				ForEach<U>([&func](Entity entity, ComponentHandle<U> componentU) {
+					ComponentHandle<T> componentT = entity.GetComponent<T>();
+					ComponentHandle<V> componentV = entity.GetComponent<V>();
 					if (componentT && componentV)
 					{
 						func(entity, componentT, componentU, componentV);
@@ -337,9 +460,9 @@ namespace ECS
 			}
 			else if (minCount == compMgrVCount)
 			{
-				ForEach<V>([&func](Entity entity, V* componentV) {
-					T* componentT = entity.GetComponent<T>();
-					U* componentU = entity.GetComponent<U>();
+				ForEach<V>([&func](Entity entity, ComponentHandle<V> componentV) {
+					ComponentHandle<T> componentT = entity.GetComponent<T>();
+					ComponentHandle<U> componentU = entity.GetComponent<U>();
 					if (componentT && componentU)
 					{
 						func(entity, componentT, componentU, componentV);
@@ -349,32 +472,32 @@ namespace ECS
 		}
 
 		template <typename T>
-		static void ForEach(std::function<void(T*)> func)
+		static void ForEach(std::function<void(ComponentHandle<T>)> func)
 		{
-			ForEach<T>([&func](Entity, T* component) {
+			ForEach<T>([&func](Entity, ComponentHandle<T> component) {
 				func(component);
 			});
 		}
 
 		template <typename T, typename U>
-		static void ForEach(std::function<void(T*, U*)> func)
+		static void ForEach(std::function<void(ComponentHandle<T>, ComponentHandle<U>)> func)
 		{
-			ForEach<T, U>([&func](Entity, T* componentT, U* componentU) {
+			ForEach<T, U>([&func](Entity, ComponentHandle<T> componentT, ComponentHandle<U> componentU) {
 				func(componentT, componentU);
 			});
 		}
 
 		template <typename T, typename U, typename V>
-		static void ForEach(std::function<void(T*, U*, V*)> func)
+		static void ForEach(std::function<void(ComponentHandle<T>, ComponentHandle<U>, ComponentHandle<V>)> func)
 		{
-			ForEach<T, U, V>([&func](Entity, T* componentT, U* componentU, V* componentV) {
+			ForEach<T, U, V>([&func](Entity, ComponentHandle<T> componentT, ComponentHandle<U> componentU, ComponentHandle<V> componentV) {
 				func(componentT, componentU, componentV);
 			});
 		}
 
-	private:
 		static Registry& GetRegistry();
 
+	private:
 		EntityID mId;
 	};
 } // namespace ECS

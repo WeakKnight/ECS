@@ -46,7 +46,8 @@ int main()
 			if (i % 3 == 0)
 			{
 				auto movable = entity.AddComponent<Movable>();
-				assert(entity == Entity::FromComponent(movable));
+				auto entityPrime = Entity::FromComponent(movable);
+				assert(entity == entityPrime);
 			}
 		}
 	}
