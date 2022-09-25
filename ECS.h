@@ -9,6 +9,8 @@
 #include <functional>
 #include <cassert>
 
+#define COMPONENT_CTOR inline void ComponentInit
+
 namespace ECS
 {
 	void Init();
@@ -70,6 +72,8 @@ namespace ECS
 		ComponentPool()
 		{
 			mComponents = (T*)malloc(sizeof(T) * mCapacity);
+			std::uninitialized_default_construct_n(mComponents, mCapacity);
+
 			mOwners.resize(mCapacity);
 			mGenerations.resize(mCapacity);
 			mFreeSlots.reserve(mCapacity);
@@ -100,7 +104,8 @@ namespace ECS
 			handle.generation = mGenerations[handle.index];
 
 			mOwners[handle.index] = owner;
-			mComponents[handle.index] = T(std::forward<Args>(args)...);
+			mComponents[handle.index] = T();
+			mComponents[handle.index].ComponentInit(std::forward<Args>(args)...);
 
 			mFreeSlots.pop_back();
 
@@ -134,6 +139,8 @@ namespace ECS
 			}
 
 			T* newComponents = (T*)malloc(sizeof(T) * newCapacity);
+			std::uninitialized_default_construct_n(newComponents, newCapacity);
+
 			memcpy(newComponents, mComponents, sizeof(T) * mCapacity);
 			free(mComponents);
 			mComponents = newComponents;

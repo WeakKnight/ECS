@@ -2,7 +2,7 @@
 
 struct Position
 {
-	Position(float px, float py)
+	COMPONENT_CTOR(float px, float py)
 	{
 		x = px;
 		y = py;
@@ -14,7 +14,7 @@ struct Position
 
 struct Velocity
 {
-	Velocity(float pdx, float pdy)
+	COMPONENT_CTOR(float pdx, float pdy)
 	{
 		dx = pdx;
 		dy = pdy;
@@ -26,6 +26,9 @@ struct Velocity
 
 struct Movable
 {
+	COMPONENT_CTOR()
+	{
+	}
 };
 
 typedef ECS::Entity Entity;
